@@ -1,68 +1,43 @@
-name: Windows
-
+name: Windows CMake path verification
 on:
-  pull_request:
   push:
-    branches: ['**']
-    tags-ignore: ['**']  # Don't trigger on tag pushes
-  release:
-    types: [published]
-
+    branches: [verify-2720-windows]
+permissions:
+  contents: read
 jobs:
-  build:
-    runs-on: windows-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - arch: 'x64'
-          suffix: ''
-        - arch: 'arm64'
-          suffix: 'arm64'
-
+  downstream:
+    if: github.repository == 'businessdeveloper69/ninja'
+    runs-on: windows-2025
+    timeout-minutes: 30
     steps:
-    - uses: actions/checkout@v7
-
-    - name: Install dependencies
-      run: choco install re2c
-
-    - name: Build ninja
-      shell: bash
-      run: |
-        cmake -Bbuild -A ${{ matrix.arch }} -DCMAKE_COMPILE_WARNING_AS_ERROR=1
-        cmake --build build --parallel --config Debug
-        cmake --build build --parallel --config Release
-
-    - name: Test ninja (Debug)
-      if: matrix.arch != 'arm64'
-      run: .\ninja_test.exe
-      working-directory: build/Debug
-
-    - name: Test ninja (Release)
-      if: matrix.arch != 'arm64'
-      run: .\ninja_test.exe
-      working-directory: build/Release
-
-    - name: Create ninja archive
-      shell: bash
-      run: |
-        mkdir artifact
-        7z a artifact/ninja-win${{ matrix.suffix }}.zip ./build/Release/ninja.exe
-
-    # Upload ninja binary archive as an artifact
-    - name: Upload artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: ninja-binary-archives${{ matrix.suffix }}
-        path: artifact
-
-    - name: Upload release asset
-      if: github.event.action == 'published'
-      uses: ncipollo/release-action@v1
-      with:
-        allowUpdates: true # if release exists it will edit it.
-        artifactContentType: "application/zip" # if empty defaults to raw
-        replacesArtifacts: true # will update existing release assets if needed.
-        omitBodyDuringUpdate: true # don't edit release body when published via webui
-        artifacts: ./artifact/ninja-win${{ matrix.suffix }}.zip # release asset
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Check out pinned Ninja revisions and fmt 12.1.0
+        shell: pwsh
+        run: |
+          git worktree add --detach "$env:RUNNER_TEMP/ninja-base" a00b184d0cc3658ce2f5d2a81c7d86569d950b57
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git worktree add --detach "$env:RUNNER_TEMP/ninja-candidate" 9938be9b0c4d3641669b43dcc7ad0f6051ee507f
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git init -q "$env:RUNNER_TEMP/fmt"
+          git -C "$env:RUNNER_TEMP/fmt" fetch -q --depth=1 https://github.com/fmtlib/fmt.git 407c905e45ad75fc29bf0f9bb7c5c2fd3475976f
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C "$env:RUNNER_TEMP/fmt" checkout -q --detach FETCH_HEAD
+          git -C "$env:RUNNER_TEMP/fmt" rev-parse HEAD
+      - name: Build both native Ninja executables
+        shell: pwsh
+        run: |
+          foreach ($lane in @('base','candidate')) {
+            cmake -S "$env:RUNNER_TEMP/ninja-$lane" -B "$env:RUNNER_TEMP/ninja-bin-$lane" -A x64 -DBUILD_TESTING=OFF
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build "$env:RUNNER_TEMP/ninja-bin-$lane" --config Release --target ninja --parallel 4
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Run actual MSVC builds and Windows path controls
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          call "%VSROOT%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 || exit /b 1
+          python "%GITHUB_WORKSPACE%\windows_verify.py"
