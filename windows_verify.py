@@ -75,7 +75,7 @@ def lane(name, candidate):
     assert (build / obj).is_file()
     source = build / "native-consumer.cpp"
     source.write_text('#include <fmt/format.h>\n#include <iostream>\nint main(){auto text=fmt::format("value={:04d}",37);std::cout<<text;return text=="value=0037"?0:1;}\n')
-    run("cl", "/nologo", "/EHsc", "/std:c++17", "/MD", "/I" + str(FMT/"include"), source, build / arc, "/Fe:verify-consumer.exe", cwd=build)
+    run("cl", "/nologo", "/EHsc", "/std:c++17", "/utf-8", "/MD", "/I" + str(FMT/"include"), source, build / arc, "/Fe:verify-consumer.exe", cwd=build)
     value = run(build/"verify-consumer.exe", cwd=build).stdout.strip()
     assert value == "value=0037"
     cases["native_consumer"] = value
