@@ -19,7 +19,7 @@ jobs:
         run: |
           git worktree add --detach "$env:RUNNER_TEMP/ninja-base" a00b184d0cc3658ce2f5d2a81c7d86569d950b57
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git worktree add --detach "$env:RUNNER_TEMP/ninja-candidate" 9938be9b0c4d3641669b43dcc7ad0f6051ee507f
+          git worktree add --detach "$env:RUNNER_TEMP/ninja-candidate" 4e1339b210aaeff324df0d7a4c854a30820fc72d
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git init -q "$env:RUNNER_TEMP/fmt"
           git -C "$env:RUNNER_TEMP/fmt" fetch -q --depth=1 https://github.com/fmtlib/fmt.git 407c905e45ad75fc29bf0f9bb7c5c2fd3475976f
